@@ -1,0 +1,20 @@
+/**
+ * Clock abstraction so domain code stays testable and business-date logic
+ * (location timezone + business_day_cutoff, spec §7.3) is explicit.
+ */
+export interface Clock {
+  now(): Date;
+}
+
+export class SystemClock implements Clock {
+  now(): Date {
+    return new Date();
+  }
+}
+
+export class FixedClock implements Clock {
+  constructor(private readonly fixed: Date) {}
+  now(): Date {
+    return new Date(this.fixed.getTime());
+  }
+}

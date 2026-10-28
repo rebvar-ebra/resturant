@@ -1,0 +1,20 @@
+{
+  "name": "@restaurantos/tests-tenancy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "echo \"no typecheck\"",
+    "lint": "echo \"no lint\"",
+    "build": "echo \"no build\""
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "@restaurantos/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.9.0",
+    "vitest": "2.1.4"
+  }
+}

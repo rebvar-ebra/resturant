@@ -1,0 +1,24 @@
+{
+  "name": "@restaurantos/customers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./public.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"no lint configured yet\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "@restaurantos/shared-kernel": "workspace:*",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "vitest": "2.1.4"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@restaurantos/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "node --env-file=../.env ./seeds/seed.mjs",
+    "typecheck": "echo \"no typecheck\"",
+    "lint": "echo \"no lint\"",
+    "test": "echo \"no tests yet\""
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0"
+  },
+  "devDependencies": {
+    "prisma": "5.22.0"
+  }
+}

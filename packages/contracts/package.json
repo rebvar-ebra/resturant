@@ -1,0 +1,21 @@
+{
+  "name": "@restaurantos/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"no lint configured yet\"",
+    "test": "echo \"no tests yet\""
+  },
+  "dependencies": {
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: restaurantos-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: local_postgres_admin
+      POSTGRES_DB: restaurantos
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d restaurantos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: restaurantos-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Object storage (spec §5: S3-compatible private storage in EU).
+  # Optional for the foundation phase — the registry blocked `minio/minio`
+  # in this environment. Re-enable when the image can be pulled.
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: restaurantos-minio
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: restaurantos
+  #     MINIO_ROOT_PASSWORD: restaurantos-local-secret
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   volumes:
+  #     - minio-data:/data
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

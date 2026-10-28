@@ -1,0 +1,556 @@
+// RestaurantOS — P0 schema (spec §7.3).
+// Conventions:
+//  - Composite PK (tenant_id, id) on every tenant-owned table.
+//  - IDs are generated in the application layer, never by the DB.
+//  - Money is bigint minor units + char(3) currency. Quantities are numeric.
+//  - Cross-tenant FKs must be impossible: every internal FK carries tenant_id.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")             // runtime role (RLS applies)
+  directUrl = env("DATABASE_MIGRATION_URL")  // migration role, used by prisma migrate
+}
+
+// ---------------------------------------------------------------------------
+// Organization
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id        String   @id @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  locations   Location[]
+  memberships Membership[]
+
+  @@map("tenants")
+}
+
+model Location {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  id                String   @db.Uuid
+  name              String
+  timezone          String   @default("Europe/Berlin")
+  currency          String   @default("EUR") @db.Char(3)
+  businessDayCutoff String   @default("04:00") @map("business_day_cutoff")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  orders         Order[]
+  stations       Station[]
+  kitchenTickets KitchenTicket[]
+
+  @@id([tenantId, id])
+  @@map("locations")
+}
+
+// ---------------------------------------------------------------------------
+// Access (spec §13)
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @db.Uuid
+  email        String    @unique
+  displayName  String    @map("display_name")
+  passwordHash String?   @map("password_hash")
+  mfaEnabled   Boolean   @default(false) @map("mfa_enabled")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  disabledAt   DateTime? @map("disabled_at") @db.Timestamptz(6)
+
+  memberships      Membership[]
+  deviceSessions   DeviceSession[]
+
+  @@map("users")
+}
+
+model Membership {
+  tenantId   String   @map("tenant_id") @db.Uuid
+  id         String   @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  role       String   // owner | manager | cashier | waiter | kitchen | inventory_manager | accountant | support
+  invitedAt  DateTime @default(now()) @map("invited_at") @db.Timestamptz(6)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
+  disabledAt DateTime? @map("disabled_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  locations MembershipLocation[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, userId])
+  @@map("memberships")
+}
+
+model MembershipLocation {
+  tenantId     String @map("tenant_id") @db.Uuid
+  membershipId String @map("membership_id") @db.Uuid
+  locationId   String @map("location_id") @db.Uuid
+
+  membership Membership @relation(fields: [tenantId, membershipId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, membershipId, locationId])
+  @@map("membership_locations")
+}
+
+model DeviceSession {
+  id         String    @id @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  label      String?
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("device_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog (spec §6.1: versioned prices and allergens)
+// ---------------------------------------------------------------------------
+
+model Category {
+  tenantId  String  @map("tenant_id") @db.Uuid
+  id        String  @db.Uuid
+  name      String
+  sortOrder Int     @default(0) @map("sort_order")
+
+  products Product[]
+
+  @@id([tenantId, id])
+  @@map("categories")
+}
+
+model Product {
+  tenantId   String  @map("tenant_id") @db.Uuid
+  id         String  @db.Uuid
+  categoryId String? @map("category_id") @db.Uuid
+  name       String
+  basePriceMinor BigInt @map("base_price_minor") @db.BigInt
+  taxRateBps     Int    @map("tax_rate_bps") // 0..10000
+  isActive   Boolean @default(true) @map("is_active")
+
+  category Category? @relation(fields: [tenantId, categoryId], references: [tenantId, id])
+
+  allergens        ProductAllergen[]
+  locationOverride LocationProductOverride[]
+
+  @@id([tenantId, id])
+  @@map("products")
+}
+
+model ProductAllergen {
+  tenantId  String @map("tenant_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  allergen  String // e.g. "gluten", "milk", "nuts" — confirmed list per tenant
+
+  product Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, productId, allergen])
+  @@map("product_allergens")
+}
+
+model LocationProductOverride {
+  tenantId    String  @map("tenant_id") @db.Uuid
+  locationId  String  @map("location_id") @db.Uuid
+  productId   String  @map("product_id") @db.Uuid
+  isAvailable Boolean @default(true) @map("is_available")
+  priceOverrideMinor BigInt? @map("price_override_minor") @db.BigInt
+
+  product Product @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, locationId, productId])
+  @@map("location_product_overrides")
+}
+
+model MenuVersion {
+  tenantId    String    @map("tenant_id") @db.Uuid
+  id          String    @db.Uuid
+  version     Int
+  status      String    @default("draft") // draft | published | archived
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  items MenuItem[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, version])
+  @@map("menu_versions")
+}
+
+model MenuItem {
+  tenantId      String @map("tenant_id") @db.Uuid
+  id            String @db.Uuid
+  menuVersionId String @map("menu_version_id") @db.Uuid
+  productId     String @map("product_id") @db.Uuid
+  nameSnapshot  String @map("name_snapshot")
+  priceMinor    BigInt @map("price_minor") @db.BigInt
+  taxRateBps    Int    @map("tax_rate_bps")
+  sortOrder     Int    @default(0) @map("sort_order")
+
+  menuVersion MenuVersion @relation(fields: [tenantId, menuVersionId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, id])
+  @@unique([tenantId, menuVersionId, productId])
+  @@map("menu_items")
+}
+
+model ModifierGroup {
+  tenantId   String @map("tenant_id") @db.Uuid
+  id         String @db.Uuid
+  name       String
+  minSelect  Int    @default(0) @map("min_select")
+  maxSelect  Int    @default(1) @map("max_select")
+
+  options ModifierOption[]
+
+  @@id([tenantId, id])
+  @@map("modifier_groups")
+}
+
+model ModifierOption {
+  tenantId         String @map("tenant_id") @db.Uuid
+  id               String @db.Uuid
+  groupId          String @map("group_id") @db.Uuid
+  name             String
+  priceDeltaMinor  BigInt @default(0) @map("price_delta_minor") @db.BigInt
+
+  group ModifierGroup @relation(fields: [tenantId, groupId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, id])
+  @@map("modifier_options")
+}
+
+// ---------------------------------------------------------------------------
+// Ordering (spec §7.4, §8)
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  placed
+  accepted
+  preparing
+  ready
+  completed
+  cancelled
+}
+
+enum OrderSource {
+  staff
+  qr
+  pickup
+  channel
+}
+
+model Order {
+  tenantId     String      @map("tenant_id") @db.Uuid
+  id           String      @db.Uuid
+  locationId   String      @map("location_id") @db.Uuid
+  status       OrderStatus
+  source       OrderSource
+  currency     String      @db.Char(3)
+  grossMinor   BigInt      @map("gross_minor") @db.BigInt
+  taxMinor     BigInt      @map("tax_minor") @db.BigInt
+  version      Int         @default(1) // optimistic locking (spec §8.3)
+  businessDate DateTime    @map("business_date") @db.Date
+  menuVersion  Int?        @map("menu_version")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id])
+
+  items          OrderItem[]
+  statusHistory  OrderStatusHistory[]
+  tickets        KitchenTicket[]
+  allocations    PaymentAllocation[]
+
+  @@id([tenantId, id])
+  @@index([tenantId, locationId, createdAt(sort: Desc), id(sort: Desc)], map: "orders_location_created_idx")
+  @@map("orders")
+}
+
+model OrderItem {
+  tenantId          String   @map("tenant_id") @db.Uuid
+  id                String   @db.Uuid
+  orderId           String   @map("order_id") @db.Uuid
+  productId         String?  @map("product_id") @db.Uuid // historical reference only
+  nameSnapshot      String   @map("name_snapshot")
+  quantity          Decimal  @db.Decimal(12, 3)
+  unitGrossMinor    BigInt   @map("unit_gross_minor") @db.BigInt
+  lineGrossMinor    BigInt   @map("line_gross_minor") @db.BigInt
+  taxRateBps        Int      @map("tax_rate_bps")
+  lineTaxMinor      BigInt   @map("line_tax_minor") @db.BigInt
+  modifiersSnapshot Json     @default("[]") @map("modifiers_snapshot") @db.JsonB
+
+  order Order @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, id])
+  @@map("order_items")
+}
+
+model OrderAdjustment {
+  tenantId   String  @map("tenant_id") @db.Uuid
+  id         String  @db.Uuid
+  orderId    String  @map("order_id") @db.Uuid
+  kind       String  // discount | service_charge | tip | voucher | delivery_fee
+  amountMinor BigInt @map("amount_minor") @db.BigInt
+  reason     String?
+  actorId    String? @map("actor_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([tenantId, id])
+  @@map("order_adjustments")
+}
+
+model OrderStatusHistory {
+  tenantId   String   @map("tenant_id") @db.Uuid
+  id         String   @db.Uuid
+  orderId    String   @map("order_id") @db.Uuid
+  fromStatus String?  @map("from_status")
+  toStatus   String   @map("to_status")
+  actorId    String?  @map("actor_id") @db.Uuid
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order Order @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, id])
+  @@index([tenantId, orderId], map: "order_status_history_order_idx")
+  @@map("order_status_history")
+}
+
+// ---------------------------------------------------------------------------
+// Kitchen / KDS
+// ---------------------------------------------------------------------------
+
+model Station {
+  tenantId   String @map("tenant_id") @db.Uuid
+  id         String @db.Uuid
+  locationId String @map("location_id") @db.Uuid
+  name       String
+
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, id])
+  @@map("stations")
+}
+
+model KitchenTicket {
+  tenantId   String @map("tenant_id") @db.Uuid
+  id         String @db.Uuid
+  locationId String @map("location_id") @db.Uuid
+  orderId    String @map("order_id") @db.Uuid
+  revision   Int    @default(1) // bumped on order amendments so KDS shows corrections
+  status     String @default("open") // open | in_progress | done | voided
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order    Order    @relation(fields: [tenantId, orderId], references: [tenantId, id])
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id])
+
+  items KitchenTicketItem[]
+
+  @@id([tenantId, id])
+  @@unique([tenantId, orderId]) // unique dispatch per order (spec §6.1)
+  @@map("kitchen_tickets")
+}
+
+model KitchenTicketItem {
+  tenantId  String    @map("tenant_id") @db.Uuid
+  id        String    @db.Uuid
+  ticketId  String    @map("ticket_id") @db.Uuid
+  orderItemId String  @map("order_item_id") @db.Uuid
+  status    String    @default("queued") // queued | preparing | ready | voided
+  startedAt DateTime? @map("started_at") @db.Timestamptz(6)
+  readyAt   DateTime? @map("ready_at") @db.Timestamptz(6)
+
+  ticket KitchenTicket @relation(fields: [tenantId, ticketId], references: [tenantId, id], onDelete: Cascade)
+
+  @@id([tenantId, id])
+  @@map("kitchen_ticket_items")
+}
+
+// ---------------------------------------------------------------------------
+// Payments (spec §6.1, §8.3)
+// ---------------------------------------------------------------------------
+
+enum PaymentStatus {
+  created
+  requires_action
+  processing
+  succeeded
+  failed
+  cancelled
+  unknown // result of the external call is unclear; do NOT retry-charge
+}
+
+enum RefundStatus {
+  requested
+  processing
+  succeeded
+  failed
+  unknown
+}
+
+model Payment {
+  tenantId           String        @map("tenant_id") @db.Uuid
+  id                 String        @db.Uuid
+  provider           String        // e.g. "stripe"
+  providerAccountId  String        @map("provider_account_id")
+  providerPaymentId  String?       @map("provider_payment_id")
+  status             PaymentStatus @default(created)
+  amountMinor        BigInt        @map("amount_minor") @db.BigInt
+  currency           String        @db.Char(3)
+  idempotencyKey     String        @map("idempotency_key")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  allocations PaymentAllocation[]
+  refunds     Refund[]
+
+  @@id([tenantId, id])
+  @@unique([provider, providerAccountId, providerPaymentId], map: "payments_provider_uniq")
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  tenantId  String @map("tenant_id") @db.Uuid
+  id        String @db.Uuid
+  paymentId String @map("payment_id") @db.Uuid
+  orderId   String @map("order_id") @db.Uuid
+  amountMinor BigInt @map("amount_minor") @db.BigInt
+
+  payment Payment @relation(fields: [tenantId, paymentId], references: [tenantId, id])
+  order   Order   @relation(fields: [tenantId, orderId], references: [tenantId, id])
+
+  @@id([tenantId, id])
+  @@map("payment_allocations")
+}
+
+model Refund {
+  tenantId          String       @map("tenant_id") @db.Uuid
+  id                String       @db.Uuid
+  paymentId         String       @map("payment_id") @db.Uuid
+  providerRefundId  String?      @map("provider_refund_id")
+  status            RefundStatus @default(requested)
+  amountMinor       BigInt       @map("amount_minor") @db.BigInt
+  reason            String
+  actorId           String?      @map("actor_id") @db.Uuid
+  idempotencyKey    String       @map("idempotency_key")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  payment Payment @relation(fields: [tenantId, paymentId], references: [tenantId, id])
+
+  @@id([tenantId, id])
+  @@map("refunds")
+}
+
+// ---------------------------------------------------------------------------
+// Reliability (spec §6.3): Outbox, Inbox, Idempotency
+// ---------------------------------------------------------------------------
+
+model OutboxEvent {
+  tenantId         String   @map("tenant_id") @db.Uuid
+  eventId          String   @map("event_id") @db.Uuid
+  aggregateId      String   @map("aggregate_id") @db.Uuid
+  aggregateVersion Int      @map("aggregate_version")
+  eventType        String   @map("event_type")
+  payload          Json     @db.JsonB
+  occurredAt       DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  deliveries EventDelivery[]
+
+  @@id([tenantId, eventId])
+  @@map("outbox_events")
+}
+
+model EventDelivery {
+  tenantId      String    @map("tenant_id") @db.Uuid
+  eventId       String    @map("event_id") @db.Uuid
+  consumerName  String    @map("consumer_name")
+  status        String    @default("pending") // pending | delivered | failed
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error") // sanitized
+  deliveredAt   DateTime? @map("delivered_at") @db.Timestamptz(6)
+
+  event OutboxEvent @relation(fields: [tenantId, eventId], references: [tenantId, eventId], onDelete: Cascade)
+
+  @@id([tenantId, eventId, consumerName])
+  @@map("event_deliveries")
+}
+
+model ConsumerInbox {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  consumerName String   @map("consumer_name")
+  eventId      String   @map("event_id") @db.Uuid
+  processedAt  DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([tenantId, consumerName, eventId])
+  @@map("consumer_inbox")
+}
+
+model WebhookInbox {
+  id                String    @id @db.Uuid
+  provider          String
+  providerAccountId String    @map("provider_account_id")
+  providerEventId   String    @map("provider_event_id")
+  tenantId          String?   @map("tenant_id") @db.Uuid // resolved from server-side mapping
+  payloadHash       String    @map("payload_hash")
+  receivedAt        DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt       DateTime? @map("processed_at") @db.Timestamptz(6)
+
+  @@unique([provider, providerAccountId, providerEventId], map: "webhook_inbox_uniq")
+  @@map("webhook_inbox")
+}
+
+model IdempotencyKey {
+  tenantId     String   @map("tenant_id") @db.Uuid
+  actorScope   String   @map("actor_scope") // user or guest session id
+  route        String
+  key          String
+  requestHash  String   @map("request_hash")
+  responseBody Json?    @map("response_body") @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([tenantId, actorScope, route, key])
+  @@map("idempotency_keys")
+}
+
+// ---------------------------------------------------------------------------
+// Operations: audit + reporting projection
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  tenantId      String   @map("tenant_id") @db.Uuid
+  id            String   @id @db.Uuid
+  actorId       String?  @map("actor_id") @db.Uuid
+  action        String
+  resourceType  String   @map("resource_type")
+  resourceId    String?  @map("resource_id") @db.Uuid
+  locationId    String?  @map("location_id") @db.Uuid
+  correlationId String?  @map("correlation_id")
+  metadata      Json?    @db.JsonB // never PAN/CVV/tokens (spec §14.2)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt(sort: Desc)], map: "audit_logs_tenant_created_idx")
+  @@map("audit_logs")
+}
+
+model DailySales {
+  tenantId         String  @map("tenant_id") @db.Uuid
+  locationId       String  @map("location_id") @db.Uuid
+  businessDate     DateTime @map("business_date") @db.Date
+  currency         String  @db.Char(3)
+  grossMinor       BigInt  @default(0) @map("gross_minor") @db.BigInt
+  taxMinor         BigInt  @default(0) @map("tax_minor") @db.BigInt
+  netMinor         BigInt  @default(0) @map("net_minor") @db.BigInt
+  refundMinor      BigInt  @default(0) @map("refund_minor") @db.BigInt
+  orderCount       Int     @default(0) @map("order_count")
+  projectionVersion Int    @default(1) @map("projection_version")
+  rebuiltAt        DateTime @default(now()) @map("rebuilt_at") @db.Timestamptz(6)
+
+  @@id([tenantId, locationId, businessDate])
+  @@map("daily_sales")
+}
