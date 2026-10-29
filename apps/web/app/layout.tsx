@@ -1,6 +1,8 @@
 import "@fontsource-variable/fraunces";
 import "@fontsource-variable/vazirmatn";
 import type { Metadata, Viewport } from "next";
+import { localeDirection } from "../lib/i18n";
+import { getCurrentLocale } from "../lib/locale.server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,9 +18,11 @@ export const viewport: Viewport = {
   themeColor: "#f3ead8",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getCurrentLocale();
+
   return (
-    <html lang="fa" dir="rtl">
+    <html lang={locale} dir={localeDirection(locale)}>
       <body>{children}</body>
     </html>
   );
