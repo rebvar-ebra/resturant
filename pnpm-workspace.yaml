@@ -2,5 +2,6 @@ packages:
   - "apps/*"
   - "packages/*"
   - "packages/modules/*"
+  - "packages/outbox"
   - "database"
   - "tests/*"

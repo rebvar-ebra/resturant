@@ -11,7 +11,7 @@ import type {
 
 type Tx = Pick<
   PrismaClient,
-  "tenant" | "location" | "membership" | "membershipLocation"
+  "tenant" | "location" | "membership" | "membershipLocation" | "publicSlug"
 >;
 
 export class PrismaTenantRepository implements TenantRepository {
@@ -45,11 +45,21 @@ export class PrismaLocationRepository implements LocationRepository {
         tenantId: location.tenantId,
         id: location.id,
         name: location.name,
+        slug: location.slug,
         timezone: location.timezone,
         currency: location.currency,
         businessDayCutoff: location.businessDayCutoff,
       },
     });
+    if (location.slug) {
+      await client.publicSlug.create({
+        data: {
+          slug: location.slug,
+          tenantId: location.tenantId,
+          locationId: location.id,
+        },
+      });
+    }
   }
 
   async listByTenant(tx: unknown, tenantId: Uuid): Promise<Location[]> {
@@ -63,6 +73,7 @@ export class PrismaLocationRepository implements LocationRepository {
         row.tenantId,
         row.id,
         row.name,
+        row.slug,
         row.timezone,
         row.currency,
         row.businessDayCutoff,
@@ -84,6 +95,7 @@ export class PrismaLocationRepository implements LocationRepository {
       row.tenantId,
       row.id,
       row.name,
+      row.slug,
       row.timezone,
       row.currency,
       row.businessDayCutoff,
@@ -95,12 +107,13 @@ function rehydrateLocation(
   tenantId: Uuid,
   id: Uuid,
   name: string,
+  slug: string | null,
   timezone: string,
   currency: string,
   businessDayCutoff: string,
 ): Location {
   const l = Object.create(Location.prototype) as Location;
-  Object.assign(l, { tenantId, id, name, timezone, currency, businessDayCutoff });
+  Object.assign(l, { tenantId, id, name, slug, timezone, currency, businessDayCutoff });
   return l;
 }
 

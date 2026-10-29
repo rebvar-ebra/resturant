@@ -16,7 +16,7 @@ SaaS عملیاتی برای هماهنگ‌کردن سفارش، آشپزخان
 | Kitchen Slice (KDS + SSE) | ⬜ |
 | Payment Slice (Stripe Sandbox + Webhook Inbox) | ⬜ |
 | Reporting Slice | ⬜ |
-| Web App (Next.js) | ⬜ placeholder |
+| Web App (Next.js) | 🟡 صفحه معرفی + منوی عمومی QR + سبد محلی |
 
 ## اجرای محلی
 
@@ -32,6 +32,7 @@ pnpm db:seed             # خروجی: x-user-id, tenantId, locationId تستی
 
 pnpm dev:api             # http://localhost:3001/v1/health
 pnpm dev:worker          # outbox relay
+pnpm dev:web             # http://localhost:3000
 ```
 
 ### تست سریع Tenant Slice

@@ -2,11 +2,32 @@
   "name": "@restaurantos/web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "echo \"web app lands with the catalog slice (Next.js + Tailwind, spec §5)\"",
-    "build": "echo \"no build yet\"",
-    "typecheck": "echo \"no typecheck yet\"",
-    "lint": "echo \"no lint yet\"",
-    "test": "echo \"no tests yet\""
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource-variable/fraunces": "5.3.0",
+    "@fontsource-variable/vazirmatn": "5.3.0",
+    "next": "15.5.28",
+    "react": "19.1.10",
+    "react-dom": "19.1.10"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.3.7",
+    "@types/node": "22.9.0",
+    "@types/react": "19.1.9",
+    "@types/react-dom": "19.1.9",
+    "autoprefixer": "10.4.21",
+    "eslint": "9.39.1",
+    "eslint-config-next": "15.5.28",
+    "postcss": "8.5.6",
+    "tailwindcss": "3.4.19",
+    "typescript": "5.6.3",
+    "vitest": "2.1.4"
   }
 }

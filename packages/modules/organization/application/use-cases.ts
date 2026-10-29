@@ -49,6 +49,7 @@ export class CreateLocation {
     ctx: AuthorizedTenantContext,
     input: {
       name: string;
+      slug?: string | undefined;
       timezone?: string | undefined;
       currency?: string | undefined;
       businessDayCutoff?: string | undefined;

@@ -22,6 +22,7 @@ const createTenantSchema = z.object({
 
 const createLocationSchema = z.object({
   name: z.string().min(2).max(120),
+  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}$/).optional(),
   timezone: z.string().optional(),
   currency: z.string().length(3).optional(),
   businessDayCutoff: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
@@ -79,6 +80,7 @@ export class OrganizationController {
       locations: locations.map((l) => ({
         id: l.id,
         name: l.name,
+        slug: l.slug,
         timezone: l.timezone,
         currency: l.currency,
         businessDayCutoff: l.businessDayCutoff,

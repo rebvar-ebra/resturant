@@ -12,6 +12,7 @@ export class Location {
     readonly tenantId: Uuid,
     readonly id: Uuid,
     readonly name: string,
+    readonly slug: string | null,
     readonly timezone: string,
     readonly currency: string,
     readonly businessDayCutoff: string,
@@ -20,6 +21,7 @@ export class Location {
   static create(input: {
     tenantId: Uuid;
     name: string;
+    slug?: string | undefined;
     timezone?: string | undefined;
     currency?: string | undefined;
     businessDayCutoff?: string | undefined;
@@ -40,8 +42,33 @@ export class Location {
       throw new Error(`Invalid business day cutoff: ${cutoff}`);
     }
 
-    return new Location(input.tenantId, newId(), name, timezone, currency, cutoff);
+    const slug = input.slug ?? slugify(name);
+    if (slug !== null && !SLUG_RE.test(slug)) {
+      throw new Error(`Invalid slug: ${slug}`);
+    }
+
+    return new Location(
+      input.tenantId,
+      newId(),
+      name,
+      slug,
+      timezone,
+      currency,
+      cutoff,
+    );
   }
+}
+
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,62}$/;
+
+export function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `${base || "location"}-${suffix}`;
 }
 
 function assertValidTimezone(tz: string): void {

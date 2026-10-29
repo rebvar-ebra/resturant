@@ -40,6 +40,7 @@ async function main() {
         tenantId: TENANT_ID,
         id: LOCATION_ID,
         name: "Mitte",
+        slug: "demo-mitte",
         timezone: "Europe/Berlin",
         currency: "EUR",
       },
@@ -84,6 +85,7 @@ async function main() {
   console.log(`  x-user-id (dev auth): ${USER_ID}`);
   console.log(`  tenantId:             ${TENANT_ID}`);
   console.log(`  locationId:           ${LOCATION_ID}`);
+  console.log(`  public menu slug:     demo-mitte`);
 }
 
 main()
